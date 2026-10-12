@@ -1,0 +1,291 @@
+---
+import { getCollection, render } from 'astro:content';
+import { profiles } from '../data/profile';
+import { defaultLang, languages, pathFor, ui, type Lang } from '../i18n/ui';
+import '../styles/cv.css';
+
+interface Props {
+  lang: Lang;
+}
+
+const { lang } = Astro.props;
+const t = ui[lang];
+const profile = profiles[lang];
+const otherLanguages = languages.filter((other) => other !== lang);
+
+const formatMonth = (yearMonth: string) => {
+  const [year, month] = yearMonth.split('-').map(Number);
+  return new Date(Date.UTC(year, month - 1)).toLocaleDateString(t.dateLocale, {
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'UTC',
+  });
+};
+
+// Entries live in a folder per language, so their ids look like "en/fresha".
+const inLanguage = (entry: { id: string }) => entry.id.startsWith(`${lang}/`);
+
+const experience = (await getCollection('experience', inLanguage)).sort((a, b) =>
+  b.data.start.localeCompare(a.data.start),
+);
+const projects = (await getCollection('projects', inLanguage)).sort(
+  (a, b) => b.data.year - a.data.year,
+);
+const education = (await getCollection('education', inLanguage)).sort(
+  (a, b) => b.data.end - a.data.end,
+);
+
+// Link previews need full URLs, which are only known once `site` is set in astro.config.mjs.
+const absolute = (path: string) => (Astro.site ? new URL(path, Astro.site).href : path);
+const asset = (file: string) => `${pathFor(defaultLang)}${file}`;
+
+const pageTitle =`${profile.name} · ${profile.title.replace(' · ', ' & ')}`;
+
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'Person',
+  name: profile.name,
+  jobTitle: profile.jobTitle,
+  worksFor: { '@type': 'Organization', name: profile.employer },
+  address: { '@type': 'PostalAddress', addressLocality: 'Grodzisk Mazowiecki', addressCountry: 'PL' },
+  email: `mailto:${profile.email}`,
+  sameAs: [profile.linkedin.url],
+  alumniOf: education.map((entry) => ({
+    '@type': 'CollegeOrUniversity',
+    name: entry.data.institution,
+  })),
+};
+---
+
+<!doctype html>
+<html lang={lang}>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{pageTitle}</title>
+    <meta name="description" content={profile.description} />
+    <meta name="author" content={profile.name} />
+    <link rel="canonical" href={absolute(pathFor(lang))} />
+    {languages.map((code) => <link rel="alternate" hreflang={code} href={absolute(pathFor(code))} />)}
+    <link rel="icon" href={asset('favicon.ico')} sizes="32x32" />
+    <link rel="icon" href={asset('favicon.svg')} type="image/svg+xml" />
+    <link rel="apple-touch-icon" href={asset('apple-touch-icon.png')} />
+    <meta property="og:type" content="profile" />
+    <meta property="og:site_name" content={profile.name} />
+    <meta property="og:title" content={pageTitle} />
+    <meta property="og:description" content={profile.description} />
+    <meta property="og:url" content={absolute(pathFor(lang))} />
+    <meta property="og:locale" content={t.ogLocale} />
+    {otherLanguages.map((code) => <meta property="og:locale:alternate" content={ui[code].ogLocale} />)}
+    <meta property="og:image" content={absolute(asset('og.png'))} />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content={`${profile.name}, ${profile.title}`} />
+    <meta property="profile:first_name" content={profile.firstName} />
+    <meta property="profile:last_name" content={profile.lastName} />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={pageTitle} />
+    <meta name="twitter:description" content={profile.description} />
+    <meta name="twitter:image" content={absolute(asset('og.png'))} />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Source+Sans+3:ital,wght@0,400;0,600;1,400&family=Source+Serif+4:opsz,wght@8..60,600&display=swap"
+    />
+    <script type="application/ld+json" is:inline set:html={JSON.stringify(jsonLd)} />
+    <script is:inline>
+      // Apply a saved theme choice before first paint; without one the page is light.
+      try {
+        var savedTheme = localStorage.getItem('theme');
+        if (savedTheme === 'light' || savedTheme === 'dark') document.documentElement.dataset.theme = savedTheme;
+      } catch (e) {}
+    </script>
+  </head>
+  <body>
+    <main class="sheet">
+      <header class="masthead">
+        <div class="masthead-top">
+          <h1>{profile.name}</h1>
+          <div class="actions">
+            {
+              otherLanguages.map((code) => (
+                <a class="btn" href={pathFor(code)} hreflang={code} lang={code}>
+                  {ui[code].languageName}
+                </a>
+              ))
+            }
+            <button class="btn" type="button" id="print">{t.print}</button>
+            <button
+              class="btn"
+              type="button"
+              id="theme-toggle"
+              data-dark-label={t.darkTheme}
+              data-light-label={t.lightTheme}>{t.darkTheme}</button
+            >
+          </div>
+        </div>
+        <p class="tagline">{profile.title} <span>| {profile.focus}</span></p>
+        <ul class="contact">
+          <li>{profile.location}</li>
+          <li><a href={`mailto:${profile.email}`}>{profile.email}</a></li>
+          <li><a href={profile.linkedin.url} rel="me noopener">{profile.linkedin.label}</a></li>
+        </ul>
+      </header>
+
+      <section>
+        <h2>{t.profile}</h2>
+        <div class="body">
+          <p>{profile.summary}</p>
+        </div>
+      </section>
+
+      <section class="experience">
+        <h2>{t.experience}</h2>
+        <div class="body">
+          {
+            experience.map(async (entry) => {
+              const { Content } = await render(entry);
+              const { role, company, detail, about, start, end, stack } = entry.data;
+              return (
+                <article class="entry">
+                  <p class="when">
+                    {formatMonth(start)} – {end ? formatMonth(end) : t.present}
+                  </p>
+                  <div class="what">
+                    <h3>{role}</h3>
+                    <p class="org">
+                      <strong>{company}</strong>
+                      {detail && ` · ${detail}`}
+                    </p>
+                    {about && <p class="gloss">{about}</p>}
+                    <Content />
+                    {stack.length > 0 && (
+                      <p class="stack">
+                        <strong>{t.stack}:</strong> {stack.join(', ')}
+                      </p>
+                    )}
+                  </div>
+                </article>
+              );
+            })
+          }
+        </div>
+      </section>
+
+      <section>
+        <h2>{t.projects}</h2>
+        <div class="body">
+          {
+            projects.map(async (entry) => {
+              const { Content } = await render(entry);
+              const { name, role, url, year } = entry.data;
+              return (
+                <div class="what">
+                  <h3>{name}</h3>
+                  <p class="org">
+                    <strong>{role}</strong>
+                    {url && (
+                      <>
+                        {' · '}
+                        <a href={url} rel="noopener">
+                          {new URL(url).hostname}
+                        </a>
+                      </>
+                    )}
+                    {` · ${year}`}
+                  </p>
+                  <Content />
+                </div>
+              );
+            })
+          }
+        </div>
+      </section>
+
+      <section>
+        <h2>{t.skills}</h2>
+        <div class="body">
+          <dl>
+            {
+              profile.skills.map((skill) => (
+                <>
+                  <dt>{skill.area}</dt>
+                  <dd>{skill.items}</dd>
+                </>
+              ))
+            }
+          </dl>
+        </div>
+      </section>
+
+      <section>
+        <h2>{t.education}</h2>
+        <div class="body">
+          {
+            education.map(async (entry) => {
+              const { Content } = await render(entry);
+              const { institution, degree, start, end, note } = entry.data;
+              return (
+                <div class="what">
+                  <h3>{institution}</h3>
+                  <p class="org">
+                    <strong>{degree}</strong> · {start} – {end}
+                  </p>
+                  <Content />
+                  {note && <p class="note">{note}</p>}
+                </div>
+              );
+            })
+          }
+        </div>
+      </section>
+
+      <section>
+        <h2>{t.languages}</h2>
+        <div class="body">
+          <p>{profile.languages}</p>
+        </div>
+      </section>
+
+      <section>
+        <h2>{t.interests}</h2>
+        <div class="body">
+          <p>{profile.interests}</p>
+        </div>
+      </section>
+
+      <footer>
+        <p>© {new Date().getFullYear()} {profile.name}</p>
+      </footer>
+    </main>
+
+    <script is:inline>
+      (function () {
+        var root = document.documentElement;
+        var button = document.getElementById('theme-toggle');
+
+        function current() {
+          return root.dataset.theme === 'dark' ? 'dark' : 'light';
+        }
+        function label() {
+          button.textContent = current() === 'dark' ? button.dataset.lightLabel : button.dataset.darkLabel;
+        }
+
+        button.addEventListener('click', function () {
+          var next = current() === 'dark' ? 'light' : 'dark';
+          root.dataset.theme = next;
+          try {
+            localStorage.setItem('theme', next);
+          } catch (e) {}
+          label();
+        });
+        document.getElementById('print').addEventListener('click', function () {
+          window.print();
+        });
+        label();
+      })();
+    </script>
+  </body>
+</html>
